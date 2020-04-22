@@ -1,0 +1,2 @@
+#define MYIMPORTRESOLUTION_API __declspec(dllexport)
+#define MYIMPORTRESOLUTION_API __declspec(dllimport)
