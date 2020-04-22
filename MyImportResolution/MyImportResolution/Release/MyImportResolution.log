@@ -1,0 +1,9 @@
+﻿  pch.cpp
+  dllmain.cpp
+  MyImportResolution.cpp
+     Creating library Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\Release\MYIMPORTRESOLUTION.lib and object Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\Release\MYIMPORTRESOLUTION.exp
+  Generating code
+  Previous IPDB not found, fall back to full compilation.
+  All 4 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+  MyImportResolution.vcxproj -> Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\Release\MYIMPORTRESOLUTION.dll
