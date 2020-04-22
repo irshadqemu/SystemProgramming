@@ -1,0 +1,4 @@
+﻿  PELoader.cpp
+Z:\DoNotScan\WindowsProgramming Examples\PELoader\PELoader\PELoader\PELoader.cpp(68,25): warning C4244: 'initializing': conversion from 'std::streamoff' to 'unsigned int', possible loss of data
+PELoader.obj : warning LNK4075: ignoring '/EDITANDCONTINUE' due to '/INCREMENTAL:NO' specification
+  PELoader.vcxproj -> Z:\DoNotScan\WindowsProgramming Examples\PELoader\PELoader\Debug\PELoader.exe

@@ -1,0 +1,3 @@
+﻿  PELoader.cpp
+PELoader.obj : warning LNK4075: ignoring '/EDITANDCONTINUE' due to '/INCREMENTAL:NO' specification
+  PELoader.vcxproj -> Z:\DoNotScan\WindowsProgramming Examples\PELoader\ProgrammingProjects\PELoader\x64\Debug\PELoader.exe
