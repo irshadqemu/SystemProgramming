@@ -4,10 +4,12 @@
 #include "pch.h"
 #include "framework.h"
 #include "MyImportResolution.h"
+#include <stdlib.h>
 
 
 
-VOID ParseForwardExport(LPCSTR lpForwardStr, LPSTR& lpForwardDll, LPSTR& lpForwardProc);
+VOID ParseForwardByName(LPCSTR lpForwardStr, LPSTR& lpForwardDll, LPSTR& lpForwardProc);
+VOID ParseForwardByOrdinal(LPCSTR lpForwardStr, LPSTR& lpForwardDll, UINT& ForwardProc);
 
 MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcName)
 {
@@ -25,16 +27,18 @@ MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcNa
     auto pOptionalHeader = reinterpret_cast<IMAGE_OPTIONAL_HEADER*>(&pNtHeader->OptionalHeader);
     auto pExportDir = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(pBaseAddr + pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 
+    //Find the starting oridinal number
+    auto OrdinalBase = pExportDir->Base;
     
     DWORD pFuncRVA;
     // If it is resolution by oridinal, then top word will be zero and bottom word will have oridinal number. 
     if ((((UINT32)(lpProcName)) & 0xFFFF00000) == 0)
     {
         auto  Ordinal = (USHORT)(((UINT32)(lpProcName)) & 0x0000FFFF);
-        if (Ordinal > pExportDir->NumberOfFunctions)
+        if ((Ordinal-OrdinalBase) >= pExportDir->NumberOfFunctions)
             return NULL;
 
-        pFuncRVA = reinterpret_cast<DWORD*>(pBaseAddr + pExportDir->AddressOfFunctions)[Ordinal - 1];
+        pFuncRVA = reinterpret_cast<DWORD*>(pBaseAddr + pExportDir->AddressOfFunctions)[Ordinal - OrdinalBase];
     }
     else
     {
@@ -54,7 +58,7 @@ MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcNa
         if (OrdinalIndex == -1)
             return NULL;
         //Get the function RVA
-        pFuncRVA = reinterpret_cast<DWORD*>(pBaseAddr + pExportDir->AddressOfFunctions)[OrdinalIndex];
+        pFuncRVA = reinterpret_cast<DWORD*>(pBaseAddr + pExportDir->AddressOfFunctions)[OrdinalIndex - OrdinalBase + 1];
     }
 
     
@@ -64,10 +68,28 @@ MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcNa
     if (pFuncRVA > pExportDirStart && pFuncRVA < pExportDirEnd)
     {
         LPCSTR lpForwardStr = reinterpret_cast<LPCSTR>(pBaseAddr + pFuncRVA);
-        LPSTR lpForwardDll, lpForwardProc;
-        ParseForwardExport(lpForwardStr, lpForwardDll, lpForwardProc);
-        HMODULE hForwardDll = LoadLibraryA(lpForwardDll);
-        return MyGetProcAddress(hForwardDll, lpForwardProc); //Recursively call the MyGetProcAddress
+
+        //Forward str can of two types: forward by name(ntdll.RtlEnterCriticalSection) or forward by ordinal(ntdll.#27)
+        if (strstr(lpForwardStr, ".#") != NULL)
+        {
+            LPSTR lpForwardDll;
+            UINT ForwardOrdinal;
+            ParseForwardByOrdinal(lpForwardStr, lpForwardDll, ForwardOrdinal);
+            HMODULE hForwardDLL = LoadLibraryA(lpForwardDll);
+            auto   hResult = MyGetProcAddress(hForwardDLL, MAKEINTRESOURCE(ForwardOrdinal));
+            delete[] lpForwardDll;
+            return hResult;
+        }
+        else
+        {
+            LPSTR lpForwardDll, lpForwardProc;
+            ParseForwardByName(lpForwardStr, lpForwardDll, lpForwardProc);
+            HMODULE hForwardDll = LoadLibraryA(lpForwardDll);
+            auto hResult =  MyGetProcAddress(hForwardDll, lpForwardProc); //Recursively call the MyGetProcAddress
+            delete[] lpForwardDll;
+            delete[] lpForwardProc;
+            return hResult;
+        }
     }
 
     return reinterpret_cast<FARPROC>(pBaseAddr + pFuncRVA);
@@ -76,11 +98,11 @@ MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcNa
 /*
 * Parses the forwarded export string of format <Dllname>.<ProcName>
 * Parameters:
-*   lpForwardStr: forwarded export string NDLL.EnterCriticalSection
+*   lpForwardStr: forwarded export string eg NDLL.EnterCriticalSection
 *   lpForwardDll: reference to variable that will set to DllName eg NTDLL.dll
 *   lpForwardProc: reference to variable that will set to ProcName eg EnterCriticalSection
 */
-VOID ParseForwardExport(LPCSTR lpForwardStr, LPSTR &lpForwardDll,  LPSTR &lpForwardProc)
+VOID ParseForwardByName(LPCSTR lpForwardStr, LPSTR &lpForwardDll,  LPSTR &lpForwardProc)
 {
  
     auto lpPeriod = strchr(lpForwardStr, '.');
@@ -94,5 +116,27 @@ VOID ParseForwardExport(LPCSTR lpForwardStr, LPSTR &lpForwardDll,  LPSTR &lpForw
     strncpy_s(&lpForwardDll[DllNameLen], 5, ".dll", 5);
 
     strncpy_s(lpForwardProc, ProcNameLen + 1, lpPeriod + 1, ProcNameLen + 1);
+
+}
+
+/*
+* Parses the forwarded export string of format <Dllname>.#<Oridinal>
+* Parameters:
+*   lpForwardStr: forwarded export string eg NDLL.#23
+*   lpForwardDll: reference to variable that will set to DllName eg NTDLL.dll
+*   lpForwardProc: reference to variable that will set to Ordinal eg 23
+*/
+
+VOID ParseForwardByOrdinal(LPCSTR lpForwardStr, LPSTR& lpForwardDll, UINT& ForwardProc)
+{
+
+    auto lpPeriod = strchr(lpForwardStr, '.');
+    auto DllNameLen = (UINT)(lpPeriod - lpForwardStr);
+
+    lpForwardDll = new CHAR[DllNameLen + 5]; //5 byte extra for ".dll\0"
+    memcpy_s(lpForwardDll, DllNameLen, lpForwardStr, DllNameLen);
+    strncpy_s(&lpForwardDll[DllNameLen], 5, ".dll", 5);
+
+    ForwardProc = atoi(lpPeriod + 2);
 
 }

@@ -1,8 +1,0 @@
-﻿  MyImportResolution.cpp
-Z:\DoNotScan\WindowsProgramming Examples\MyImportResolution\MyImportResolution\MyImportResolution\MyImportResolution.cpp(31,8): warning C4311: 'type cast': pointer truncation from 'LPCSTR' to 'UINT32'
-Z:\DoNotScan\WindowsProgramming Examples\MyImportResolution\MyImportResolution\MyImportResolution\MyImportResolution.cpp(31,8): warning C4302: 'type cast': truncation from 'LPCSTR' to 'UINT32'
-Z:\DoNotScan\WindowsProgramming Examples\MyImportResolution\MyImportResolution\MyImportResolution\MyImportResolution.cpp(33,55): warning C4311: 'type cast': pointer truncation from 'LPCSTR' to 'UINT32'
-Z:\DoNotScan\WindowsProgramming Examples\MyImportResolution\MyImportResolution\MyImportResolution\MyImportResolution.cpp(33,55): warning C4302: 'type cast': truncation from 'LPCSTR' to 'UINT32'
-LINK : warning LNK4076: invalid incremental status file 'Z:\DoNotScan\WindowsProgramming Examples\MyImportResolution\MyImportResolution\x64\Debug\MYIMPORTRESOLUTION.ilk' (which will be deleted); linking nonincrementally
-     Creating library Z:\DoNotScan\WindowsProgramming Examples\MyImportResolution\MyImportResolution\x64\Debug\MYIMPORTRESOLUTION.lib and object Z:\DoNotScan\WindowsProgramming Examples\MyImportResolution\MyImportResolution\x64\Debug\MYIMPORTRESOLUTION.exp
-  MyImportResolution.vcxproj -> Z:\DoNotScan\WindowsProgramming Examples\MyImportResolution\MyImportResolution\x64\Debug\MYIMPORTRESOLUTION.dll
