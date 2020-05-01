@@ -8,52 +8,49 @@
 //Set it to FALSE to force relocations code to execute
 #define TRY_LOADIONG_AT_PREFERED_BASE_ADDR TRUE
 
-//Define PE structures variables
-BYTE* pbPEData = nullptr;
-IMAGE_DOS_HEADER* pDosHeader = nullptr;
-IMAGE_NT_HEADERS* pNtHeader = nullptr;
-IMAGE_FILE_HEADER* pFileHeader = nullptr;
-IMAGE_OPTIONAL_HEADER* pOptionalHeader = nullptr;
-BYTE* pBaseAddr; 
+
 
 MYIMPORTRESOLUTION_API HMODULE MyLoadLibraryA(LPCSTR lpLibFileName)
 {
+    auto * pPEStruct = new PEStruct; //user struct to hold the pointers to PE structures
   
-    if (!ReadAndValidatePE(lpLibFileName))
+    if (!ReadAndValidatePE(lpLibFileName,  pPEStruct))
     {
         return NULL;
     }
-    if (!LoadPESection())
+    if (!LoadPESection(pPEStruct))
     {
         return  NULL;
     }
-    if (!FixRelocations())
+    if (!FixRelocations(pPEStruct))
     {
         return  NULL;
     }
-    if (!ResolveImportTable())
+    if (!ResolveImportTable(pPEStruct))
     {
         return  NULL;
     }
-    if (!FixSectionPerm())
+    if (!FixSectionPerm(pPEStruct))
     {
         return NULL;
     }
-    if (!ExecuteTLSCallBacks())
+    if (!ExecuteTLSCallBacks(pPEStruct))
     {
 
         return  NULL;
     }
-    if (!CallDllMain())
+    if (!CallDllMain(pPEStruct))
     {
         return NULL;
     }
-    delete[] pbPEData;
-    return reinterpret_cast<HMODULE>(pBaseAddr);
+    auto Result = pPEStruct->pBaseAddr;
+    delete[] pPEStruct->pbPEData;
+    delete pPEStruct;
+    return reinterpret_cast<HMODULE>(Result);
 }
 
 //Read PE file,  preform signatures tests, sets the PE-Structures
-BOOL ReadAndValidatePE(LPCSTR pcsFilename)
+BOOL ReadAndValidatePE(LPCSTR pcsFilename, PEStruct* pPEStruct)
 {
     //Read file into  a buffer
     std::ifstream fdInFile(pcsFilename, std::ios::binary | std::ios::ate);
@@ -64,51 +61,52 @@ BOOL ReadAndValidatePE(LPCSTR pcsFilename)
         return FALSE;
     }
     auto szFileSize = fdInFile.tellg();
-    pbPEData = new BYTE[szFileSize];
-    if (!pbPEData)
+    pPEStruct->szPEData = szFileSize;
+    pPEStruct->pbPEData = new BYTE[szFileSize];
+    if (!pPEStruct->pbPEData)
     {
         std::cerr << "Unable to allocate memory for reading PE file." << std::endl;
         fdInFile.close();
         return FALSE;
     }
     fdInFile.seekg(0, std::ios::beg);
-    fdInFile.read(reinterpret_cast<char*>(pbPEData), szFileSize);
+    fdInFile.read(reinterpret_cast<char*>(pPEStruct->pbPEData), szFileSize);
     fdInFile.close();
 
     //MZ signature check
-    pDosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(pbPEData);
-    if (pDosHeader->e_magic != 0x5A4D)
+    pPEStruct->pDosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(pPEStruct->pbPEData);
+    if (pPEStruct->pDosHeader->e_magic != IMAGE_DOS_SIGNATURE)
     {
         std::cerr << pcsFilename << " is not a PE file." << std::endl;
-        delete[] pbPEData;
+        delete[] pPEStruct->pbPEData;
         return FALSE;
     }
 
     // Assign structure pointer
-    pNtHeader = reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<char*>(pbPEData) + pDosHeader->e_lfanew);
+    pPEStruct->pNtHeader = reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<char*>(pPEStruct->pbPEData) + pPEStruct->pDosHeader->e_lfanew);
     //PE signature check
-    if (pNtHeader->Signature != 0x00004550)
+    if (pPEStruct->pNtHeader->Signature != IMAGE_NT_SIGNATURE)
     {
         std::cerr << pcsFilename << " is not a PE file." << std::endl;
-        delete[] pbPEData;
+        delete[] pPEStruct->pbPEData;
         return FALSE;
     }
-    pOptionalHeader = &pNtHeader->OptionalHeader;
-    pFileHeader = &pNtHeader->FileHeader;
+    pPEStruct->pOptionalHeader = &pPEStruct->pNtHeader->OptionalHeader;
+    pPEStruct->pFileHeader = &pPEStruct->pNtHeader->FileHeader;
 
     //Perform check for valid palateform
 #ifdef _WIN64
-    if (pFileHeader->Machine != IMAGE_FILE_MACHINE_AMD64)
+    if (pPEStruct->pFileHeader->Machine != IMAGE_FILE_MACHINE_AMD64)
     {
         std::cerr << "Invalid machine architecture. PE is not a 64bit file" << std::endl;
-        delete[] pbPEData;
+        delete[] pPEStruct->pbPEData;
         return FALSE;
     }
 #else
-    if (pFileHeader->Machine != IMAGE_FILE_MACHINE_I386)
+    if (pPEStruct->pFileHeader->Machine != IMAGE_FILE_MACHINE_I386)
     {
         std::cerr << "Invalid machine architecture. PE is not a 32bit file" << std::endl;
-        delete[] pbPEData;
+        delete[] pPEStruct->pbPEData;
         return FALSE;
 
     }
@@ -118,33 +116,57 @@ BOOL ReadAndValidatePE(LPCSTR pcsFilename)
 
 
 //Allocate memory and Copy Sections
-BOOL LoadPESection()
+BOOL LoadPESection(PEStruct* pPEStruct)
 {
 
     if (TRY_LOADIONG_AT_PREFERED_BASE_ADDR)
     {
-        pBaseAddr = reinterpret_cast<BYTE*> (VirtualAlloc(reinterpret_cast<LPVOID>(pOptionalHeader->ImageBase), pOptionalHeader->SizeOfImage, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+        pPEStruct->pBaseAddr = reinterpret_cast<BYTE*> (VirtualAlloc(reinterpret_cast<LPVOID>(pPEStruct->pOptionalHeader->ImageBase), pPEStruct->pOptionalHeader->SizeOfImage, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
     }
-    if (!pBaseAddr)
+    if (!pPEStruct->pBaseAddr)
     {
-        pBaseAddr = reinterpret_cast<BYTE*> (VirtualAlloc(nullptr, pOptionalHeader->SizeOfImage, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-        if (!pBaseAddr)
+        //If file is not relocatable return 
+        if (pPEStruct->pFileHeader->Characteristics & IMAGE_FILE_RELOCS_STRIPPED)
+        {
+            std::cerr << "Unable to load the Dll at preffered address. It is not relocatable.";
+            return FALSE;
+        }
+        pPEStruct->pBaseAddr = reinterpret_cast<BYTE*> (VirtualAlloc(nullptr, pPEStruct->pOptionalHeader->SizeOfImage, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+        if (!pPEStruct->pBaseAddr)
         {
             std::cerr << "Unable to reserve meory for PE file" << std::endl;
-            delete[] pbPEData;
+            delete[] pPEStruct->pbPEData;
             return FALSE;
         }
     }
 
-    //Copy the headers + section table
-    CopyMemory(pBaseAddr, pbPEData, pOptionalHeader->SizeOfHeaders);
-
-    //Copy the sections
-    auto* pSectionHeader = IMAGE_FIRST_SECTION(pNtHeader);
-    for (UINT i = 0; i < pFileHeader->NumberOfSections; i++, pSectionHeader++)
+    
+ 
+    if (pPEStruct->pOptionalHeader->SizeOfHeaders > pPEStruct->szPEData)
     {
-        LPVOID pVirutalAddress = pBaseAddr + pSectionHeader->VirtualAddress;
-        LPVOID pPointertoRawData = pbPEData + pSectionHeader->PointerToRawData;
+        std::cerr << "pOptionalHeader->SizeOfHeaders is greater than raw file size. Corrupt file?";
+        return FALSE;
+    }
+
+    //Copy the headers + section table
+    CopyMemory(pPEStruct->pBaseAddr, pPEStruct->pbPEData, pPEStruct->pOptionalHeader->SizeOfHeaders);
+    
+    //Copy the sections
+    auto* pSectionHeader = IMAGE_FIRST_SECTION(pPEStruct->pNtHeader);
+    for (UINT i = 0; i < pPEStruct->pFileHeader->NumberOfSections; i++, pSectionHeader++)
+    {
+        LPVOID pVirutalAddress = pPEStruct->pBaseAddr + pSectionHeader->VirtualAddress;
+        LPVOID pPointertoRawData = pPEStruct->pbPEData + pSectionHeader->PointerToRawData;
+       
+        //check  pPointertoRawData doesn't point outside of array pbPEData
+        auto RawPointerEnd = (UINT)((BYTE *)(pPointertoRawData) - pPEStruct->pbPEData) + pSectionHeader->SizeOfRawData;
+        if (RawPointerEnd > pPEStruct->szPEData)
+        {
+            std::cerr << "RawPointer for section " << pSectionHeader->Name << " points outside the raw file. Corrupt file?" << std::endl;
+            return FALSE;
+
+        }
+
         CopyMemory(pVirutalAddress, pPointertoRawData, pSectionHeader->SizeOfRawData);
     }
 
@@ -155,19 +177,19 @@ BOOL LoadPESection()
 
 
 //Fix Relocation
-BOOL FixRelocations()
+BOOL FixRelocations(PEStruct* pPEStruct)
 {
-    BYTE* RelocationDelta = pBaseAddr - pOptionalHeader->ImageBase;
+    BYTE* RelocationDelta = pPEStruct->pBaseAddr - pPEStruct->pOptionalHeader->ImageBase;
     if (RelocationDelta)//if delta is zero no need for relocations
     {
         //If relocation size is zero, no need for relocation
-        if (!pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size)
+        if (!pPEStruct->pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size)
         {
             return TRUE;
         }
 
         //Get the virtual address of first IMAGE_BASE_RELOCATION structure
-        auto* pRelocationStructure = reinterpret_cast<IMAGE_BASE_RELOCATION*> (pBaseAddr + pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
+        auto* pRelocationStructure = reinterpret_cast<IMAGE_BASE_RELOCATION*> (pPEStruct->pBaseAddr + pPEStruct->pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
 
         //Go through each relocation structure and fix relocations
         while (pRelocationStructure->VirtualAddress)
@@ -187,13 +209,13 @@ BOOL FixRelocations()
 #ifdef _WIN64
                 if (RelocationType == IMAGE_REL_BASED_DIR64)
                 {
-                    UINT_PTR* pByteToBePatched = reinterpret_cast<UINT_PTR*>(pBaseAddr + pRelocationStructure->VirtualAddress + RelocationOffsetValue);
+                    UINT_PTR* pByteToBePatched = reinterpret_cast<UINT_PTR*>(pPEStruct->pBaseAddr + pRelocationStructure->VirtualAddress + RelocationOffsetValue);
                     *pByteToBePatched += reinterpret_cast<UINT_PTR>(RelocationDelta);
                 }
 #else
                 if (RelocationType == IMAGE_REL_BASED_HIGHLOW)
                 {
-                    UINT* pByteToBePatched = reinterpret_cast<UINT*>(pBaseAddr + pRelocationStructure->VirtualAddress + RelocationOffsetValue);
+                    UINT* pByteToBePatched = reinterpret_cast<UINT*>(pPEStruct->pBaseAddr + pRelocationStructure->VirtualAddress + RelocationOffsetValue);
                     *pByteToBePatched += reinterpret_cast<UINT_PTR>(RelocationDelta);
                 }
 
@@ -215,19 +237,19 @@ BOOL FixRelocations()
 
 
 //Fix Import Table
-BOOL ResolveImportTable()
+BOOL ResolveImportTable(PEStruct* pPEStruct)
 {
     //If size of Imports in DataDirectory is zero, no imports to resolve
-    if (!pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size)
+    if (!pPEStruct->pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size)
     {
         return TRUE;
     }
     // Get the VA of first import structure
-    auto* pImportDescriptorStruct = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(pBaseAddr + pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+    auto* pImportDescriptorStruct = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(pPEStruct->pBaseAddr + pPEStruct->pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
     for (; pImportDescriptorStruct->Name; pImportDescriptorStruct++)
     {
         //Get the name of the DLL and load it
-        LPCSTR psImportDllName = reinterpret_cast<LPCSTR>(pBaseAddr + pImportDescriptorStruct->Name);
+        LPCSTR psImportDllName = reinterpret_cast<LPCSTR>(pPEStruct->pBaseAddr + pImportDescriptorStruct->Name);
         HMODULE hDll = LoadLibraryA(psImportDllName);
         if (hDll == NULL)
         {
@@ -236,8 +258,8 @@ BOOL ResolveImportTable()
         }
 
         // Iterate through thunk arrays and resolve each API 
-        ULONG_PTR* pOrignalFirstThunk = reinterpret_cast<ULONG_PTR*>(pBaseAddr + pImportDescriptorStruct->OriginalFirstThunk);
-        ULONG_PTR* pFirstThunk = reinterpret_cast<ULONG_PTR*>(pBaseAddr + pImportDescriptorStruct->FirstThunk);
+        ULONG_PTR* pOrignalFirstThunk = reinterpret_cast<ULONG_PTR*>(pPEStruct->pBaseAddr + pImportDescriptorStruct->OriginalFirstThunk);
+        ULONG_PTR* pFirstThunk = reinterpret_cast<ULONG_PTR*>(pPEStruct->pBaseAddr + pImportDescriptorStruct->FirstThunk);
 
         //Some packers don't set the OrignalFirstThunk
         if (!pOrignalFirstThunk)
@@ -252,7 +274,7 @@ BOOL ResolveImportTable()
             }
             else
             {
-                auto* pImportByName = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(pBaseAddr + *pOrignalFirstThunk);
+                auto* pImportByName = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(pPEStruct->pBaseAddr + *pOrignalFirstThunk);
                 *pFirstThunk = reinterpret_cast<ULONG_PTR>(GetProcAddress(hDll, pImportByName->Name));
             }
         }
@@ -294,17 +316,17 @@ DWORD SecPerm2PagePerm(const DWORD SecPerm)
 }
 
 //Apply proper permissions to all of the sections
-BOOL FixSectionPerm()
+BOOL FixSectionPerm(PEStruct* pPEStruct)
 {
     //Mark PE header read-only
     DWORD NewProtect, OldProtect; 
-    VirtualProtect(pBaseAddr, pOptionalHeader->SizeOfHeaders, PAGE_READONLY, &OldProtect);
+    VirtualProtect(pPEStruct->pBaseAddr, pPEStruct->pOptionalHeader->SizeOfHeaders, PAGE_READONLY, &OldProtect);
     
     //Copy the sections
-    auto* pSectionHeader = IMAGE_FIRST_SECTION(pNtHeader);
-    for (UINT i = 0; i < pFileHeader->NumberOfSections; i++, pSectionHeader++)
+    auto* pSectionHeader = IMAGE_FIRST_SECTION(pPEStruct->pNtHeader);
+    for (UINT i = 0; i < pPEStruct->pFileHeader->NumberOfSections; i++, pSectionHeader++)
     {
-        LPVOID pVirutalAddress = pBaseAddr + pSectionHeader->VirtualAddress;
+        LPVOID pVirutalAddress = pPEStruct->pBaseAddr + pSectionHeader->VirtualAddress;
 
         //Free discarable section
         if (pSectionHeader->Characteristics & IMAGE_SCN_MEM_DISCARDABLE)
@@ -317,30 +339,30 @@ BOOL FixSectionPerm()
     }
     return TRUE;
 }
-BOOL ExecuteTLSCallBacks()
+BOOL ExecuteTLSCallBacks(PEStruct* pPEStruct)
 {   //Check the size of TLS callback from data directory
-    if (pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size)
+    if (pPEStruct->pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size)
     {
-        auto* pImageTlsDir = reinterpret_cast<IMAGE_TLS_DIRECTORY*>(pBaseAddr + pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+        auto* pImageTlsDir = reinterpret_cast<IMAGE_TLS_DIRECTORY*>(pPEStruct->pBaseAddr + pPEStruct->pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
 
         //Get array of TLS callbacks address
         auto* pCallBackAddr = reinterpret_cast<PIMAGE_TLS_CALLBACK*>(pImageTlsDir->AddressOfCallBacks);
         for (; *pCallBackAddr; pCallBackAddr++)
-            (*pCallBackAddr)(pBaseAddr, DLL_PROCESS_ATTACH, nullptr);
+            (*pCallBackAddr)(pPEStruct->pBaseAddr, DLL_PROCESS_ATTACH, nullptr);
     }
     return TRUE;
 }
 
 //Call Entrypoint
-BOOL CallDllMain()
+BOOL CallDllMain(PEStruct* pPEStruct)
 {
 
-    BOOL Result = TRUE;
+    BOOL Result = FALSE;
     //check if DllMain exists
-    if (pOptionalHeader->AddressOfEntryPoint)
+    if (pPEStruct->pOptionalHeader->AddressOfEntryPoint)
     {
-        auto MyDllMain = reinterpret_cast<DLL_ENTRY_POINT>(pBaseAddr + pOptionalHeader->AddressOfEntryPoint);
-        Result = MyDllMain(pBaseAddr, DLL_PROCESS_ATTACH, NULL);
+        auto MyDllMain = reinterpret_cast<DLL_ENTRY_POINT>(pPEStruct->pBaseAddr + pPEStruct->pOptionalHeader->AddressOfEntryPoint);
+        Result = MyDllMain(pPEStruct->pBaseAddr, DLL_PROCESS_ATTACH, NULL);
     }
 
   

@@ -4,17 +4,69 @@
 #include <Windows.h>
 #include "MyImportResolution.h"
 
+DWORD WINAPI LoadAndCall(_In_ LPVOID lpDllName);
 
 int main()
 {
-   
-    auto hOrd = MyLoadLibraryA("..\\Debug\\ord.dll");
-    auto pOrd123_1 = MyGetProcAddress(hOrd, MAKEINTRESOURCE(123));
-    printf("MyGetProcAddress: ordinal #123: 0x%p\n", (void*)pOrd123_1);
-    pOrd123_1();
+    auto hEmptyFile = MyLoadLibraryA("..\\Debug\\ZeroByteFile.dll");
+    if (hEmptyFile == NULL)
+    {
+        std::cout << "Uanble to load ZeroByteFile.dll" << std::endl;
+    }
+    auto hOneByeFile = MyLoadLibraryA("..\\Debug\\OneByteFile.dll");
+    if (hOneByeFile == NULL)
+    {
+        std::cout << "Uanble to load OneByteFile.dll" << std::endl;
+    }
+    auto hNonExistantFile = MyLoadLibraryA("..\\Debug\\NonExistantFile.dll");
+    if (hNonExistantFile == NULL)
+    {
+        std::cout << "Uanble to load NonExistantFile.dll" << std::endl;
+    }
+
+    DWORD ThreadId;
+    HANDLE hThread;
+#ifdef _WIN64 
+
+    const char* lpDllName = "..\\Debug\\ordx.dll";
+    hThread = CreateThread(NULL, 0, LoadAndCall, (LPVOID)(lpDllName), 0, &ThreadId);
+
+#else
+    auto hTestFile = MyLoadLibraryA("..\\Debug\\test1_p.exe");
+    if (hNonExistantFile == NULL)
+    {
+        std::cout << "Uanble to load test1_p.exe" << std::endl;
+    }
+    const char* lpDllName = "..\\Debug\\ord.dll";
+    hThread = CreateThread(NULL, 0, LoadAndCall, (LPVOID)(lpDllName), 0, &ThreadId);
+
+
+#endif // _WIN64
+    WaitForSingleObject(hThread, INFINITE);
+    std::cout << "Thread has completed.";
 
    return 0;
 }
+
+
+DWORD WINAPI LoadAndCall( _In_ LPVOID lpDllName)
+{
+    
+    auto hOrd = MyLoadLibraryA(reinterpret_cast<LPCSTR>(lpDllName));
+    if (!hOrd)
+    {
+        return -1;
+    }
+    auto pOrd123_1 = MyGetProcAddress(hOrd, MAKEINTRESOURCE(123));
+    printf("MyGetProcAddress: ordinal #123: 0x%p\n", (void*)pOrd123_1);
+    if (!pOrd123_1)
+    {
+        return -1;
+    }
+    pOrd123_1();
+    return  0;
+}
+
 /*
 void TestMyGetProcAddress()
 {
