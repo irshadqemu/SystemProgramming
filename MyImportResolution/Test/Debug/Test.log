@@ -1,2 +1,3 @@
 ﻿  Test.cpp
+LINK : warning LNK4076: invalid incremental status file 'Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\Debug\Test.ilk' (which will be deleted); linking nonincrementally
   Test.vcxproj -> Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\Debug\Test.exe

@@ -1,8 +1,13 @@
-﻿  MyImportResolution.cpp
+﻿  pch.cpp
+  dllmain.cpp
+  MyGetProcAddress.cpp
+  MyLoadLibraryA.cpp
+Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\MyImportResolution\MyLoadLibraryA.cpp(65,25): warning C4244: 'initializing': conversion from 'std::streamoff' to 'unsigned int', possible loss of data
      Creating library Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\Release\MYIMPORTRESOLUTION.lib and object Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\Release\MYIMPORTRESOLUTION.exp
   Generating code
-  1 of 5 functions (20.0%) were compiled, the rest were copied from previous compilation.
-    0 functions were new in current compilation
+Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\MyImportResolution\MyLoadLibraryA.cpp(51): warning C4715: 'MyLoadLibraryA': not all control paths return a value
+  148 of 152 functions (97.4%) were compiled, the rest were copied from previous compilation.
+    147 functions were new in current compilation
     0 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   MyImportResolution.vcxproj -> Z:\DoNotScan\Dropbox\MyGitHub\SystemProgramming\MyImportResolution\Release\MYIMPORTRESOLUTION.dll

@@ -8,5 +8,6 @@ It manually loads the PE executable in memory and executes it. It can also handl
  ## MyImportResolution
  A custom implementation of WIN API GetProcAddress. It can handle resolution by names and resolution by oridinal. It can also handle forwarded exports. 
 ### Key Files:
-[MyImportResolution.cpp](https://github.com/irshadqemu/SystemProgramming/blob/master/MyImportResolution/MyImportResolution/MyImportResolution.cpp): implementation of GetProcAddress.  
+[MyGetProcAddress.cpp](https://github.com/irshadqemu/SystemProgramming/blob/master/MyImportResolution/MyImportResolution/MyGetProcAddress.cpp): custom implementation of GetProcAddress.  
+[MyLoadLibraryA.cpp](https://github.com/irshadqemu/SystemProgramming/blob/master/MyImportResolution/MyImportResolution/MyLoadLibraryA.cpp): custom implementation of LoadLibraryA
 [Test.cpp](https://github.com/irshadqemu/SystemProgramming/blob/master/MyImportResolution/Test/Test.cpp): A test program to verify the results.  
