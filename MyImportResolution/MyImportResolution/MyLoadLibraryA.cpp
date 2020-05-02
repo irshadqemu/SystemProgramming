@@ -10,16 +10,20 @@
 
 
 
+
 MYIMPORTRESOLUTION_API HMODULE MyLoadLibraryA(LPCSTR lpLibFileName)
 {
+   
     auto * pPEStruct = new PEStruct; //user struct to hold the pointers to PE structures
   
     if (!ReadAndValidatePE(lpLibFileName,  pPEStruct))
     {
+       
         return NULL;
     }
     if (!LoadPESection(pPEStruct))
     {
+        
         return  NULL;
     }
     if (!FixRelocations(pPEStruct))
@@ -28,25 +32,27 @@ MYIMPORTRESOLUTION_API HMODULE MyLoadLibraryA(LPCSTR lpLibFileName)
     }
     if (!ResolveImportTable(pPEStruct))
     {
+       
         return  NULL;
     }
     if (!FixSectionPerm(pPEStruct))
     {
+       
         return NULL;
     }
     if (!ExecuteTLSCallBacks(pPEStruct))
     {
-
+     
         return  NULL;
     }
-    if (!CallDllMain(pPEStruct))
-    {
-        return NULL;
-    }
+    
+    CallDllMain(pPEStruct);
     auto Result = pPEStruct->pBaseAddr;
     delete[] pPEStruct->pbPEData;
     delete pPEStruct;
+
     return reinterpret_cast<HMODULE>(Result);
+   
 }
 
 //Read PE file,  preform signatures tests, sets the PE-Structures
@@ -56,7 +62,7 @@ BOOL ReadAndValidatePE(LPCSTR pcsFilename, PEStruct* pPEStruct)
     std::ifstream fdInFile(pcsFilename, std::ios::binary | std::ios::ate);
     if (!fdInFile.good())
     {
-        std::cerr << "Unable to open the file " << pcsFilename << std::endl;
+        std::cerr << "Unable to open the file." << pcsFilename << std::endl;
         fdInFile.close();
         return FALSE;
     }

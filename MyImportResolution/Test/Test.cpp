@@ -4,10 +4,11 @@
 #include <Windows.h>
 #include "MyImportResolution.h"
 
-DWORD WINAPI LoadAndCall(_In_ LPVOID lpDllName);
+DWORD WINAPI LoadAndCall(_In_ LPVOID param);
 
 int main()
 {
+    /*
     auto hEmptyFile = MyLoadLibraryA("..\\Debug\\ZeroByteFile.dll");
     if (hEmptyFile == NULL)
     {
@@ -23,9 +24,8 @@ int main()
     {
         std::cout << "Uanble to load NonExistantFile.dll" << std::endl;
     }
+  
 
-    DWORD ThreadId;
-    HANDLE hThread;
 #ifdef _WIN64 
 
     const char* lpDllName = "..\\Debug\\ordx.dll";
@@ -38,33 +38,62 @@ int main()
         std::cout << "Uanble to load test1_p.exe" << std::endl;
     }
     const char* lpDllName = "..\\Debug\\ord.dll";
-    hThread = CreateThread(NULL, 0, LoadAndCall, (LPVOID)(lpDllName), 0, &ThreadId);
+#endif  _WIN64//
+    */
 
-
-#endif // _WIN64
-    WaitForSingleObject(hThread, INFINITE);
-    std::cout << "Thread has completed.";
+    DWORD ThreadId[2];
+    HANDLE hThread[2];
+    LPCSTR lpThread1 = "Thread 1:";
+    LPCSTR lpThread2 = "Thread 2:";
+    hThread[0] = CreateThread(NULL, 0, LoadAndCall,(VOID *)lpThread1, 0, &ThreadId[0]);
+    hThread[1] = CreateThread(NULL, 0, LoadAndCall, (VOID *)lpThread2, 0, &ThreadId[1]);
+    WaitForMultipleObjects(2, hThread, TRUE, INFINITE);
+    std::cout << "Thread has completed."<<std::endl;
 
    return 0;
 }
 
 
-DWORD WINAPI LoadAndCall( _In_ LPVOID lpDllName)
+DWORD WINAPI LoadAndCall(_In_ LPVOID param)
 {
+    auto param1 = reinterpret_cast<LPCSTR>(param);
+    LPCSTR lpOrdxDll = "..\\Debug\\ordx.dll"; //64 bit dll for error checking
+    LPCSTR lpTheDll = "..\\Debug\\thedll.dll";
+    LPCSTR lpOrdDll = "..\\Debug\\ord.dll";
+
+    auto hOrdxDll = MyLoadLibraryA(lpOrdxDll);
+    if (!hOrdxDll)
+    {
+        std::cout << param1 << "Unable to to load ordx.dll" << std::endl;
+    }
+
+    auto hTheDll = MyLoadLibraryA(lpTheDll);
+    if (!hTheDll)
+    {
+        std::cout << param1 << "Unable to load thedll.dll" << std::endl;
+    }
+    auto pDoSomething = MyGetProcAddress(hTheDll, "DoSomething");
+    if (!pDoSomething)
+    {
+        std::cout << param1 << "Unable to load resolve export DoSomething from thedll.dll" << std::endl;
+    }
+    else
+        pDoSomething();
+
+    auto hOrdDll = MyLoadLibraryA(lpOrdDll);
+    if (!hOrdDll)
+    {
+        std::cout << param1 << "Unable to load ord.dll" << std::endl;
+    }
+    auto pOrd123 = MyGetProcAddress(hOrdDll, MAKEINTRESOURCE(123));
+    if (!pOrd123)
+    {
+        std::cout << param1  << "Unable to resolve export #123 from  ord.dll" << std::endl;
+    }
+    else
+        pOrd123();
     
-    auto hOrd = MyLoadLibraryA(reinterpret_cast<LPCSTR>(lpDllName));
-    if (!hOrd)
-    {
-        return -1;
-    }
-    auto pOrd123_1 = MyGetProcAddress(hOrd, MAKEINTRESOURCE(123));
-    printf("MyGetProcAddress: ordinal #123: 0x%p\n", (void*)pOrd123_1);
-    if (!pOrd123_1)
-    {
-        return -1;
-    }
-    pOrd123_1();
-    return  0;
+    return 0;
 }
 
 /*

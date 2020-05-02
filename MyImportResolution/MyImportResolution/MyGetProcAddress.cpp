@@ -5,24 +5,32 @@
 #include "framework.h"
 #include "MyImportResolution.h"
 #include <stdlib.h>
+#include <mutex>
+#include <iostream>
 
 
 
 
-
+//std::mutex Mtx2;
 MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcName)
 {
-    if (hModule == NULL || lpProcName == NULL)
-        return NULL;
 
+    if (hModule == NULL || lpProcName == NULL)
+    {
+        return NULL;
+    }
     // Get a pointer to export dirctory
     BYTE* pBaseAddr = reinterpret_cast<BYTE*>(hModule);
     auto pDosHeader = reinterpret_cast<IMAGE_DOS_HEADER *>(hModule);
-    if (pDosHeader->e_magic != 0x5A4D)
+    if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE)
+    {
         return NULL;
+    }
     auto pNtHeader = reinterpret_cast<IMAGE_NT_HEADERS*>(pBaseAddr + pDosHeader->e_lfanew);
-    if (pNtHeader->Signature != 0x00004550)
+    if (pNtHeader->Signature != IMAGE_NT_SIGNATURE)
+    {
         return NULL;
+    }
     auto pOptionalHeader = reinterpret_cast<IMAGE_OPTIONAL_HEADER*>(&pNtHeader->OptionalHeader);
     auto pExportDir = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(pBaseAddr + pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 
@@ -31,12 +39,14 @@ MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcNa
     
     DWORD pFuncRVA;
     // If it is resolution by oridinal, then top word will be zero and bottom word will have oridinal number. 
-    if ((((UINT32)(lpProcName)) & 0xFFFF00000) == 0)
+    if ((((UINT32)lpProcName) & 0xFFFF00000) == 0)
     {
         auto  Ordinal = (USHORT)(((UINT32)(lpProcName)) & 0x0000FFFF);
-        if ((Ordinal-OrdinalBase) >= pExportDir->NumberOfFunctions)
-            return NULL;
-
+        if ((Ordinal - OrdinalBase) >= pExportDir->NumberOfFunctions)
+        {
+            std::cerr << "Ordinal number is greater than total number of functions" << std::endl;
+            return NULL;  
+        }
         pFuncRVA = reinterpret_cast<DWORD*>(pBaseAddr + pExportDir->AddressOfFunctions)[Ordinal - OrdinalBase];
     }
     else
@@ -55,7 +65,10 @@ MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcNa
         }
         //if unable to find the name, return NULL
         if (OrdinalIndex == -1)
+        {
+
             return NULL;
+        }
         //Get the function RVA
         pFuncRVA = reinterpret_cast<DWORD*>(pBaseAddr + pExportDir->AddressOfFunctions)[OrdinalIndex - OrdinalBase + 1];
     }
@@ -77,6 +90,7 @@ MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcNa
             HMODULE hForwardDLL = LoadLibraryA(lpForwardDll);
             auto   hResult = MyGetProcAddress(hForwardDLL, MAKEINTRESOURCE(ForwardOrdinal));
             delete[] lpForwardDll;
+
             return hResult;
         }
         else
@@ -87,6 +101,7 @@ MYIMPORTRESOLUTION_API FARPROC MyGetProcAddress(HMODULE hModule, LPCSTR lpProcNa
             auto hResult =  MyGetProcAddress(hForwardDll, lpForwardProc); //Recursively call the MyGetProcAddress
             delete[] lpForwardDll;
             delete[] lpForwardProc;
+
             return hResult;
         }
     }
